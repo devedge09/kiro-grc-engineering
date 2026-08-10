@@ -1,0 +1,52 @@
+# NOTICE
+
+## Original Work
+
+This repository is a fork of:
+
+  claude-grc-engineering
+  https://github.com/GRCEngClub/claude-grc-engineering
+  Copyright (c) 2025-2026 GRC Engineering Club contributors
+  Licensed under the MIT License
+
+All GRC framework content, command runbooks, connector plugins, skill
+definitions, JSON schemas, YAML configuration, and compliance knowledge
+in this repository are the original work of the GRC Engineering Club
+(https://grcengclub.com) and their contributors.
+
+The MIT License requires this copyright notice to be included in all
+copies or substantial portions of the software. It is reproduced in
+full in the LICENSE file.
+
+## Modifications in this fork
+
+This fork (https://github.com/devedge09/kiro-grc-engineering) was
+created by devedge09 to port the toolkit for use with Kiro
+(https://kiro.dev) in environments where npm packages cannot be
+installed.
+
+Changes made (no GRC content was altered):
+
+  - Removed npm dependencies: js-yaml, dotenv, @octokit/rest
+  - Added yaml-shim.mjs: zero-dependency YAML parser using Node built-ins
+  - Replaced dotenv with an inline .env reader using fs/promises
+  - Replaced @octokit/rest with gh CLI calls via execSync
+  - Converted CJS (require/module.exports) scripts to ESM imports
+  - Added kiro/ directory with Kiro steering and agent configuration files
+
+## Third-party content (inherited from upstream)
+
+Secure Controls Framework (SCF) data:
+  Licensed under CC BY-ND 4.0
+  Source: https://securecontrolsframework.com
+  Used verbatim and unmodified per license terms.
+
+CIS Controls v8 content (plugins/frameworks/cis-controls/):
+  Licensed under CC BY-SA 4.0
+  Source: Center for Internet Security (https://www.cisecurity.org)
+  See plugins/frameworks/cis-controls/LICENSE-CIS.md
+
+ISO/IEC, PCI DSS, HITRUST, NIST, and other framework plugins contain
+only original implementation guidance. Normative control text is the
+intellectual property of the respective standards bodies; consult your
+licensed copy of each standard for authoritative requirements.

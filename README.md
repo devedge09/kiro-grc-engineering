@@ -1,160 +1,109 @@
-# claude-grc-engineering
+# kiro-grc-engineering
 
-![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/GRCEngClub/claude-grc-engineering?utm_source=oss&utm_medium=github&utm_campaign=GRCEngClub%2Fclaude-grc-engineering&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
-[![Greptile runs](https://img.shields.io/badge/dynamic/json?label=Greptile%20runs&query=$.total_count&url=https://api.github.com/search/issues?q=repo%253AGRCEngClub%252Fclaude-grc-engineering%2520type%253Apr%2520commenter%253Agreptile-apps%255Bbot%255D&suffix=%20reviews&color=1f6feb&labelColor=171717)](https://github.com/GRCEngClub/claude-grc-engineering/pulls?q=commenter%3Agreptile-apps%5Bbot%5D)
-[![OSV-Scanner](https://github.com/GRCEngClub/claude-grc-engineering/actions/workflows/osv-scanner.yml/badge.svg)](https://github.com/GRCEngClub/claude-grc-engineering/actions/workflows/osv-scanner.yml)
+> **Kiro-optimized fork of [GRCEngClub/claude-grc-engineering](https://github.com/GRCEngClub/claude-grc-engineering)**  
+> Original work by the [GRC Engineering Club](https://grcengclub.com) — all credit to them.
 
-https://github.com/user-attachments/assets/a83aa297-9fba-4a7d-b56c-06f962d1ec6b
+This fork ports the GRC Engineering toolkit to work with [Kiro](https://kiro.dev) without requiring a Claude Code subscription or npm package installs. The only change is in the dependency wiring — all the real GRC content, framework runbooks, schemas, connectors, and command logic are 100% the work of GRCEngClub.
 
-Open-source GRC Engineering resource for Claude.
+---
 
-`claude-grc-engineering` turns technical evidence from cloud, SaaS, code, and security tools into framework-aligned findings, gap reports, remediation guidance, evidence packages, and OSCAL workflows.
+## Why this fork exists
 
-It is built for the Claude ecosystem: Claude Code plugin installs first, with Claude Desktop and Claude Cowork usage supported through the same Markdown skills, command runbooks, schemas, and repository files.
+The original toolkit is a Claude Code plugin. I don't have a Claude Code subscription, so I adapted it to run inside [Kiro](https://kiro.dev), which is free. The npm registry was also blocked in my environment, so I removed the three external dependencies (`js-yaml`, `dotenv`, `@octokit/rest`) and replaced them with Node.js built-in equivalents.
 
-It is maintained by the [GRC Engineering Club](https://grcengclub.com) for people who want compliance work to behave more like engineering work: repeatable, testable, versioned, and easy to extend.
+**I did not write the GRC content.** The framework runbooks, command definitions, connector plugins, schemas, and all compliance knowledge come entirely from GRCEngClub. Please ⭐ [their repo](https://github.com/GRCEngClub/claude-grc-engineering) and support their work.
 
-> Not affiliated with Anthropic. Claude, Anthropic, and related marks are property of their respective owners.
+---
 
-## What it does
+## What changed from upstream
 
-The toolkit is a Claude Code plugin marketplace. The same plugin skills and command runbooks are also useful in Claude Desktop and Claude Cowork when you add this repository as project context or a shared workspace. Install the pieces you need:
+Only the Node.js wiring was changed — no GRC content was modified.
 
-- `grc-engineer`: the core automation hub for gap assessment, IaC scanning, evidence collection, remediation generation, policy generation, PR review, continuous monitoring, and multi-framework optimization.
-- Persona plugins: workflows for auditors, internal GRC teams, third-party risk, reporting, learning, and iterative GRC automation.
-- Framework plugins: reference guidance for SOC 2, NIST 800-53, ISO 27001, FedRAMP, PCI DSS, CMMC, HITRUST, CIS Controls, GDPR, DORA, HIPAA Security, regional privacy/security regimes, and more.
-- Connector plugins: thin wrappers around tools such as AWS CLI, GitHub CLI, gcloud, Azure CLI, Okta, Slack, Datadog, CrowdStrike, Drata, Splunk, Tenable, Snowflake, and POA&M automation.
-- Diagram plugins: editable draw.io system boundaries, evidence flows, control maps, risk treatment, audit workflows, framework crosswalks, TPRM, POA&M, data flows, RACI, and operating model visuals.
-- OSCAL and bridge plugins: tooling for FedRAMP/OSCAL workflows and integrations with external GRC systems.
+| Original dependency | Replacement | Reason |
+|---|---|---|
+| `js-yaml` (npm) | `yaml-shim.mjs` — inline YAML parser using Node built-ins | npm blocked |
+| `dotenv` (npm) | Inline `.env` reader using `fs/promises` | npm blocked |
+| `@octokit/rest` (npm) | `gh` CLI calls via `execSync` | npm blocked |
+| CJS `require()` in 3 scripts | ESM `import` | required by `"type": "module"` |
 
-The common path is:
+Everything runs on **Node 22 built-ins alone** — no `npm install` needed.
 
-```text
-connectors collect evidence
-        ↓
-findings match schemas/finding.schema.json
-        ↓
-grc-engineer maps findings through SCF
-        ↓
-reports, remediation, evidence packages, OSCAL outputs
-```
+---
 
-The Secure Controls Framework (SCF) crosswalk is used as the control backbone: 1,468 controls mapped to 249 frameworks. The toolkit references control IDs and implementation guidance; it does not reproduce copyrighted standards text.
-
-## Install in 60 seconds
-
-Inside Claude Code:
+## Kiro setup (quick start)
 
 ```bash
-/plugin marketplace add GRCEngClub/claude-grc-engineering
-/plugin install grc-engineer@grc-engineering-suite
+# 1. Clone to ~/grc-engineering
+git clone https://github.com/devedge09/kiro-grc-engineering.git ~/grc-engineering
+
+# 2. Create Kiro config directories and findings cache
+mkdir -p ~/.kiro/steering ~/.kiro/agents ~/.cache/claude-grc/findings
+
+# 3. Install the Kiro integration files
+cp ~/grc-engineering/kiro/steering/grc-engineering.md ~/.kiro/steering/
+cp ~/grc-engineering/kiro/agents/*.json ~/.kiro/agents/
 ```
 
-For a first run without cloud credentials, use GitHub as the evidence source:
+Open Kiro and start using it:
 
-```bash
-/plugin install github-inspector@grc-engineering-suite
-/plugin install soc2@grc-engineering-suite
-/github-inspector:setup
-/github-inspector:collect --scope=@me
-/grc-engineer:gap-assessment SOC2 --sources=github-inspector
+```
+gap-assessment SOC2
+scan-iac ./terraform SOC2,NIST
+generate-policy access_control
+map-controls AC-2 NIST-800-53
+grc-frameworks
 ```
 
-Full walkthrough: [docs/QUICKSTART.md](docs/QUICKSTART.md).
+The Kiro steering file (`~/.kiro/steering/grc-engineering.md`) is loaded automatically into every session — no plugin install command needed.
 
-Using Claude Desktop or Claude Cowork instead of Claude Code? Start with [docs/CLAUDE-COWORK.md](docs/CLAUDE-COWORK.md). Anthropic's security and compliance posture is documented at [trust.anthropic.com](https://trust.anthropic.com/), and the Claude Cowork third-party platform guide is here: [Claude Desktop on third-party platforms](https://claude.com/docs/cowork/3p/overview).
+---
 
-## Common workflows
+## Kiro integration files
 
-| Goal | Command |
+| File | Purpose |
 |---|---|
-| Run a gap assessment against one or more frameworks | `/grc-engineer:gap-assessment` |
-| Scan Terraform, CloudFormation, or Kubernetes for compliance issues | `/grc-engineer:scan-iac` |
-| Validate a control end to end | `/grc-engineer:test-control` |
-| Generate remediation code, scripts, or policy | `/grc-engineer:generate-implementation`, `/grc-engineer:generate-policy` |
-| Map one control across frameworks | `/grc-engineer:map-controls-unified` |
-| Find conflicting requirements across frameworks | `/grc-engineer:find-conflicts` |
-| Optimize a multi-framework control plan | `/grc-engineer:optimize-multi-framework` |
-| Collect evidence from cloud/SaaS/code systems | connector-specific setup, collect, and status commands |
-| Build audit workpapers or evidence packages | `/grc-auditor:generate-workpaper`, `/grc-engineer:collect-evidence` |
-| Generate OSCAL SSP/SAP/SAR/POA&M outputs | `/oscal:*`, `/fedramp-ssp:*` |
-| Draft leadership updates and automation coverage reports | `/report:exec-summary`, `/report:automation-coverage` |
-| Create editable GRC diagrams | `/grc-diagrams:drawio`, `/grc-diagrams:system-boundary`, `/grc-diagrams:evidence-flow`, `/grc-diagrams:control-map` |
-| Learn a framework, control, or GRC role | `/teach-me:framework`, `/teach-me:control`, `/teach-me:role`, `/teach-me:quiz` |
-| Run an academic research project end-to-end | `/academic-research-companion:research` |
+| `kiro/steering/grc-engineering.md` | Persistent context loaded into every Kiro session |
+| `kiro/agents/grc-engineer.json` | Core GRC engineering agent (gap assessment, IaC scan, policy gen) |
+| `kiro/agents/grc-auditor.json` | Audit workpaper and audit readiness agent |
+| `kiro/agents/grc-connector.json` | Evidence collection agent (AWS, GitHub, GCP, Azure, etc.) |
 
-Every command has a reference page in its plugin's `commands/` directory.
+---
 
-## Plugin map
+## Full feature documentation
 
-Use `/grc-engineer:frameworks` to discover framework coverage and plugin depth.
+See the [original upstream README](https://github.com/GRCEngClub/claude-grc-engineering#readme) for the complete list of:
+- All 37 supported compliance frameworks
+- All 14 connector plugins (AWS, GCP, Azure, GitHub, Okta, Wiz, etc.)
+- All commands and workflows
+- OSCAL / FedRAMP tooling
+- Architecture and data contract
 
-High-level categories:
+---
 
-| Category | Examples |
-|---|---|
-| Engineering hub | `grc-engineer` |
-| Persona/workflow plugins | `grc-auditor`, `grc-internal`, `grc-tprm`, `grc-reporter`, `grc-loop`, `teach-me`, `academic-research-companion` |
-| Diagram plugin | `grc-diagrams` for editable draw.io GRC diagrams |
-| Framework plugins | `soc2`, `nist-800-53`, `iso27001`, `fedramp-rev5`, `fedramp-20x`, `pci-dss`, `cmmc`, `hitrust`, `cis-controls`, `gdpr`, `dora`, `us-hipaa-security`, and others |
-| Connector plugins | `aws-inspector`, `github-inspector`, `gcp-inspector`, `azure-inspector`, `okta-inspector`, `slack-inspector`, `datadog-inspector`, `crowdstrike-inspector`, `drata-inspector`, `splunk-inspector`, `tenable-inspector`, `snowflake-inspector` |
-| Dashboards, knowledge sources | `compliance-posture-dashboard`, `gcp-docs` |
-| OSCAL/FedRAMP tooling | `oscal`, `fedramp-ssp`, POA&M automation plugins |
+## Credits & Attribution
 
-The marketplace manifest lives at [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json).
+All GRC content, framework runbooks, command logic, connector plugins, and schemas are the original work of:
 
-## Data contract
+**GRC Engineering Club**  
+https://grcengclub.com  
+https://github.com/GRCEngClub/claude-grc-engineering
 
-Every connector emits Findings that match [schemas/finding.schema.json](schemas/finding.schema.json). A Finding is one resource with one or more control evaluations.
+This fork was created by [devedge09](https://github.com/devedge09) solely to make the toolkit usable in Kiro without a Claude Code subscription.
 
-That contract keeps connectors small: each connector only needs to collect and normalize evidence. `grc-engineer` handles framework expansion, reporting, remediation, and downstream workflows.
-
-For the full architecture and schema example, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-## Documentation
-
-- [docs/QUICKSTART.md](docs/QUICKSTART.md): first gap assessment in about 10 minutes
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): pipeline model, data contract, plugin categories, extensibility
-- [docs/FRAMEWORK-COVERAGE.md](docs/FRAMEWORK-COVERAGE.md): generated coverage for SCF-mapped frameworks
-- [docs/FRAMEWORK-PLUGIN-GUIDE.md](docs/FRAMEWORK-PLUGIN-GUIDE.md): scaffold and level up framework plugins
-- [docs/GRC-DATA.md](docs/GRC-DATA.md): user-owned `grc-data/` contracts for metrics, risks, vendors, exceptions, and policies
-- [docs/ENTERPRISE-DEPLOYMENT.md](docs/ENTERPRISE-DEPLOYMENT.md): AWS Bedrock, Claude Platform on AWS, and Google Vertex AI guidance
-- [docs/CLAUDE-COWORK.md](docs/CLAUDE-COWORK.md): Claude Desktop and Claude Cowork file-oriented usage, including third-party platform handoff notes
-- [Anthropic Trust Center](https://trust.anthropic.com/): Anthropic security, compliance, and trust resources
-- [Claude Desktop on third-party platforms](https://claude.com/docs/cowork/3p/overview): official Cowork platform guidance
-- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md): how to contribute connectors, framework guidance, and docs
-- [docs/SCF-ATTRIBUTION.md](docs/SCF-ATTRIBUTION.md): SCF licensing and attribution
-
-## Contributing
-
-Contributions are welcome from GRC practitioners, auditors, security engineers, platform teams, framework experts, and commercial GRC vendors.
-
-The highest-value contributions are:
-
-- New connector plugins
-- Improvements to existing connectors
-- Framework plugin guidance and evidence patterns
-- Real-world remediation examples
-- Documentation that helps practitioners learn GRC engineering
-
-First-time contributors follow the issue → vouch → PR flow described in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) and [GOVERNANCE.md](GOVERNANCE.md).
-
-Security-sensitive reports should use the private advisory process described in [SECURITY.md](SECURITY.md).
-
-## Status
-
-Pre-1.0. The Finding schema is versioned, and breaking changes are documented in [CHANGELOG.md](CHANGELOG.md).
-
-## Star History
-
-<a href="https://www.star-history.com/?repos=GRCEngClub%2Fclaude-grc-engineering&type=date&legend=top-left">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=GRCEngClub/claude-grc-engineering&type=date&theme=dark&legend=top-left" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=GRCEngClub/claude-grc-engineering&type=date&legend=top-left" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=GRCEngClub/claude-grc-engineering&type=date&legend=top-left" />
-  </picture>
-</a>
+---
 
 ## License
 
-MIT for original code, copyright © GRC Engineering Club contributors. Exceptions are documented in [LICENSE](LICENSE). The CIS Controls plugin is CC BY-SA 4.0 per upstream terms. SCF data is CC BY-ND 4.0 and redistributed verbatim.
+**MIT** — same as upstream.
+
+Original copyright: © 2025–2026 GRC Engineering Club contributors  
+This fork's additions: © 2026 devedge09
+
+The MIT license (full text in [LICENSE](LICENSE)) requires that the original copyright notice be kept in all copies. It is preserved in [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Additional third-party terms:
+- SCF crosswalk data: CC BY-ND 4.0 — used verbatim, unmodified
+- CIS Controls plugin: CC BY-SA 4.0 — see `plugins/frameworks/cis-controls/LICENSE-CIS.md`
+- ISO/IEC, PCI DSS, HITRUST, and other framework plugins contain original implementation guidance only — normative text belongs to the respective standards bodies
+
+See [LICENSE](LICENSE) for the full upstream license and third-party notices.
