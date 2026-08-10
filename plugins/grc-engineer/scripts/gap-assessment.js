@@ -82,13 +82,18 @@ async function main(argv) {
 
   let rendered;
   switch (args.output) {
-    case 'json':     rendered = JSON.stringify(report.summary, null, 2); break;
-    case 'sarif':    rendered = JSON.stringify(toSarif(report), null, 2); break;
-    case 'oscal-ar': rendered = JSON.stringify(toOscalAssessmentResults(report), null, 2); break;
+    case 'json':           rendered = JSON.stringify(report.summary, null, 2); break;
+    case 'sarif':          rendered = JSON.stringify(toSarif(report), null, 2); break;
+    case 'oscal-ar':       rendered = JSON.stringify(toOscalAssessmentResults(report), null, 2); break;
+    case 'html':           rendered = toHtml(report); break;
+    case 'csv':            rendered = toCsv(report); break;
+    case 'github-issues':  rendered = toGithubIssues(report); break;
     case 'markdown':
-    default:         rendered = renderMarkdown(report);
+    default:               rendered = renderMarkdown(report);
   }
-  const reportPath = path.join(bundleDir, `gap-report.${args.output === 'markdown' ? 'md' : args.output}`);
+
+  const extMap = { markdown: 'md', json: 'json', sarif: 'sarif', 'oscal-ar': 'oscal-ar.json', html: 'html', csv: 'csv', 'github-issues': 'sh' };
+  const reportPath = path.join(bundleDir, `gap-report.${extMap[args.output] || args.output}`);
   await fs.writeFile(reportPath, rendered);
 
   if (!args.quiet) {
@@ -133,8 +138,8 @@ function parseArgs(argv) {
   if (positional) {
     out.frameworks = positional.split(',').map(s => s.trim()).filter(Boolean);
   }
-  if (!['markdown', 'json', 'sarif', 'oscal-ar'].includes(out.output)) {
-    fail(EXIT.USAGE, `--output must be one of markdown|json|sarif|oscal-ar`);
+  if (!['markdown', 'json', 'sarif', 'oscal-ar', 'html', 'csv', 'github-issues'].includes(out.output)) {
+    fail(EXIT.USAGE, `--output must be one of markdown|json|sarif|oscal-ar|html|csv|github-issues`);
   }
   return out;
 }
@@ -573,6 +578,343 @@ function toOscalAssessmentResults(r) {
       }]
     }
   };
+}
+
+// ─── HTML renderer ────────────────────────────────────────────────────────────
+
+function toHtml(r) {
+  const date = r.generated_at.slice(0, 10);
+  const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const sevColour = s => ({ critical:'#c0392b', high:'#e67e22', medium:'#f39c12', low:'#27ae60', info:'#7f8c8d' }[s] || '#95a5a6');
+  const sevBadge = s => `<span style="background:${sevColour(s)};color:#fff;padding:2px 8px;border-radius:3px;font-size:0.8em;font-weight:bold">${esc(s||'—')}</span>`;
+
+  // Coverage bars
+  const coverageBars = r.stats.map(s => {
+    const pct = s.pass_rate_pct;
+    const colour = pct >= 80 ? '#27ae60' : pct >= 60 ? '#f39c12' : '#c0392b';
+    return `
+      <div class="fw-card">
+        <div class="fw-name">${esc(s.framework)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${colour}"></div></div>
+        <div class="fw-stats">
+          <span>${s.passing} passing</span>
+          <span style="color:#c0392b">${s.failing} failing</span>
+          <span style="color:#7f8c8d">${s.inconclusive} inconclusive</span>
+          <strong>${pct}% pass rate</strong>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Tier rows builder
+  const tierRows = (items, showSev) => items.length === 0
+    ? '<tr><td colspan="6" style="text-align:center;color:#7f8c8d;font-style:italic">None</td></tr>'
+    : items.map(t => {
+        const fwList = r.frameworks.flatMap(fw => (t.frameworks[fw] || []).map(c => `<code>${esc(c)}</code>`)).join(' ');
+        const sevCell = showSev ? `<td>${sevBadge(t.severity)}</td>` : '';
+        const colCount = showSev ? 6 : 5;
+        const detail = t.failing_resources.map(fr =>
+          `<li><code>${esc(fr.source)}:${esc(fr.resource_type)}:${esc(fr.resource_id)}</code> — ${esc(fr.message)}` +
+          (fr.remediation?.ref ? `<br><small>Fix: <code>${esc(fr.remediation.ref)}</code> (${esc(fr.remediation.automation||'manual')}, ~${fr.remediation.effort_hours??'?'}h)</small>` : '') +
+          '</li>'
+        ).join('');
+        return `
+        <tr>
+          <td><code>${esc(t.scf_id)}</code></td>
+          <td>${esc(t.title)}</td>
+          <td>${esc(t.family)}</td>
+          ${sevCell}
+          <td style="text-align:center"><strong style="color:#c0392b">${t.failing_resources.length}</strong></td>
+          <td>${fwList}</td>
+        </tr>
+        ${detail ? `<tr><td colspan="${colCount}" style="background:#fafafa;padding:8px 16px"><ul style="margin:0;padding-left:1.2em;font-size:0.9em">${detail}</ul></td></tr>` : ''}`;
+      }).join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Gap Assessment — ${esc(date)}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #f5f6fa; color: #2c3e50; }
+    .header { background: #2c3e50; color: #fff; padding: 24px 32px; }
+    .header h1 { margin: 0 0 4px; font-size: 1.5em; }
+    .header p { margin: 0; opacity: .7; font-size: .9em; }
+    .meta { display: flex; gap: 24px; margin-top: 12px; font-size: .85em; opacity: .85; flex-wrap: wrap; }
+    .meta span { background: rgba(255,255,255,.15); padding: 3px 10px; border-radius: 3px; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+    .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .total-card { background: #fff; border-radius: 6px; padding: 16px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .total-card .num { font-size: 2em; font-weight: 700; line-height: 1; }
+    .total-card .label { font-size: .8em; color: #7f8c8d; margin-top: 4px; }
+    .total-card.t1 .num { color: #c0392b; }
+    .total-card.t2 .num { color: #e67e22; }
+    .total-card.t3 .num { color: #f39c12; }
+    .total-card.pass .num { color: #27ae60; }
+    .total-card.inc .num { color: #7f8c8d; }
+    section { background: #fff; border-radius: 6px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); overflow: hidden; }
+    section h2 { margin: 0; padding: 14px 20px; font-size: 1em; border-bottom: 1px solid #ecf0f1; background: #fafbfc; }
+    .fw-card { padding: 12px 20px; border-bottom: 1px solid #f0f0f0; }
+    .fw-card:last-child { border-bottom: none; }
+    .fw-name { font-weight: 600; margin-bottom: 6px; }
+    .bar-track { background: #ecf0f1; border-radius: 4px; height: 10px; margin-bottom: 6px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width .4s; }
+    .fw-stats { display: flex; gap: 16px; font-size: .85em; flex-wrap: wrap; }
+    table { width: 100%; border-collapse: collapse; font-size: .9em; }
+    th { background: #fafbfc; text-align: left; padding: 8px 12px; border-bottom: 2px solid #ecf0f1; white-space: nowrap; }
+    td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    code { background: #f0f3f9; padding: 1px 5px; border-radius: 3px; font-size: .85em; word-break: break-all; }
+    .warn { padding: 12px 20px; font-size: .85em; color: #856404; background: #fff3cd; }
+    footer { text-align: center; font-size: .8em; color: #95a5a6; padding: 20px; }
+    details > summary { cursor: pointer; list-style: none; }
+    details > summary::before { content: '▶ '; font-size: .8em; }
+    details[open] > summary::before { content: '▼ '; }
+  </style>
+</head>
+<body>
+<div class="header">
+  <h1>Gap Assessment — ${esc(date)}</h1>
+  <p>Generated by kiro-grc-engineering · <a href="https://github.com/devedge09/kiro-grc-engineering" style="color:#aed6f1">github.com/devedge09/kiro-grc-engineering</a></p>
+  <div class="meta">
+    <span>Run: <code style="background:none">${esc(r.runId)}</code></span>
+    <span>Frameworks: ${r.frameworks.map(esc).join(', ')}</span>
+    <span>Sources: ${r.sources.map(esc).join(', ')}</span>
+    <span>SCF v${esc(r.scf_version)}</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="totals">
+    <div class="total-card t1"><div class="num">${r.totals.tier1_blockers}</div><div class="label">Tier 1 Blockers</div></div>
+    <div class="total-card t2"><div class="num">${r.totals.tier2_findings}</div><div class="label">Tier 2 Findings</div></div>
+    <div class="total-card t3"><div class="num">${r.totals.tier3_recommendations}</div><div class="label">Tier 3 Recs</div></div>
+    <div class="total-card pass"><div class="num">${r.totals.passes}</div><div class="label">Passing</div></div>
+    <div class="total-card inc"><div class="num">${r.totals.inconclusive}</div><div class="label">Inconclusive</div></div>
+  </div>
+
+  <section>
+    <h2>📊 Framework Coverage</h2>
+    ${coverageBars}
+  </section>
+
+  <section>
+    <h2>🚨 Tier 1 — Blockers (${r.tiers.tier1.length})</h2>
+    <table>
+      <thead><tr><th>SCF ID</th><th>Control</th><th>Family</th><th>Severity</th><th>Failing</th><th>Framework Controls</th></tr></thead>
+      <tbody>${tierRows(r.tiers.tier1, true)}</tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>⚠️ Tier 2 — Findings (${r.tiers.tier2.length})</h2>
+    <table>
+      <thead><tr><th>SCF ID</th><th>Control</th><th>Family</th><th>Severity</th><th>Failing</th><th>Framework Controls</th></tr></thead>
+      <tbody>${tierRows(r.tiers.tier2, true)}</tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>💡 Tier 3 — Recommendations (${r.tiers.tier3.length})</h2>
+    <table>
+      <thead><tr><th>SCF ID</th><th>Control</th><th>Family</th><th>Failing</th><th>Framework Controls</th></tr></thead>
+      <tbody>${tierRows(r.tiers.tier3, false)}</tbody>
+    </table>
+  </section>
+
+  ${r.tiers.inconclusive.length ? `
+  <section>
+    <h2>❓ Inconclusive (${r.tiers.inconclusive.length}) — re-run recommended</h2>
+    <table>
+      <thead><tr><th>SCF ID</th><th>Control</th><th>Family</th><th>Resources</th><th>Framework Controls</th></tr></thead>
+      <tbody>${r.tiers.inconclusive.map(t => {
+        const fwList = r.frameworks.flatMap(fw => (t.frameworks[fw]||[]).map(c => `<code>${esc(c)}</code>`)).join(' ');
+        return `<tr><td><code>${esc(t.scf_id)}</code></td><td>${esc(t.title)}</td><td>${esc(t.family)}</td><td style="text-align:center">${t.inconclusive_resources_count}</td><td>${fwList}</td></tr>`;
+      }).join('')}</tbody>
+    </table>
+  </section>` : ''}
+
+  ${r.load_errors.length ? `
+  <section>
+    <h2>⚠️ Data Quality Warnings</h2>
+    <div class="warn">${r.load_errors.map(e => `<div>• <code>${esc(e.source)}${e.file ? '/'+esc(e.file) : ''}</code>: ${esc(e.kind)} — ${esc(e.message || (e.violations||[]).join('; '))}</div>`).join('')}</div>
+  </section>` : ''}
+
+</div>
+<footer>
+  Control mappings by <a href="https://securecontrolsframework.com">Secure Controls Framework</a> (CC BY-ND 4.0) ·
+  Toolkit: <a href="https://github.com/GRCEngClub/claude-grc-engineering">GRCEngClub/claude-grc-engineering</a> (MIT) ·
+  Kiro port: <a href="https://github.com/devedge09/kiro-grc-engineering">devedge09/kiro-grc-engineering</a>
+</footer>
+</body>
+</html>`;
+}
+
+// ─── CSV renderer ─────────────────────────────────────────────────────────────
+
+function toCsv(r) {
+  const rows = [];
+  const esc = v => {
+    const s = String(v ?? '');
+    return s.includes(',') || s.includes('"') || s.includes('\n')
+      ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
+  // Header
+  rows.push([
+    'run_id', 'generated_at', 'tier', 'scf_id', 'control_title', 'control_family',
+    'status', 'severity',
+    ...r.frameworks.flatMap(fw => [`${fw}_controls`]),
+    'failing_resources_count', 'passing_resources_count', 'inconclusive_resources_count',
+    'total_resources_evaluated',
+    'failing_resource_details',
+    'remediation_ref', 'remediation_automation', 'remediation_effort_hours'
+  ].map(esc).join(','));
+
+  const addItems = (items, tierLabel) => {
+    for (const t of items) {
+      const fwCols = r.frameworks.map(fw => (t.frameworks[fw] || []).join('|'));
+      const detailStr = t.failing_resources.map(fr =>
+        `${fr.source}:${fr.resource_type}:${fr.resource_id} — ${fr.message || ''}`
+      ).join(' | ');
+      // Aggregate remediation from the worst/first failing resource
+      const firstRem = t.failing_resources.find(fr => fr.remediation?.ref)?.remediation || {};
+
+      rows.push([
+        r.runId, r.generated_at, tierLabel,
+        t.scf_id, t.title, t.family,
+        t.status, t.severity || '',
+        ...fwCols,
+        t.failing_resources.length,
+        t.passing_resources_count,
+        t.inconclusive_resources_count,
+        t.total_resources_evaluated,
+        detailStr,
+        firstRem.ref || '', firstRem.automation || '', firstRem.effort_hours ?? ''
+      ].map(esc).join(','));
+    }
+  };
+
+  addItems(r.tiers.tier1, 'tier1-blocker');
+  addItems(r.tiers.tier2, 'tier2-finding');
+  addItems(r.tiers.tier3, 'tier3-recommendation');
+  addItems(r.tiers.inconclusive, 'inconclusive');
+  addItems(r.tiers.passes, 'pass');
+
+  return rows.join('\n');
+}
+
+// ─── GitHub Issues renderer ───────────────────────────────────────────────────
+
+function toGithubIssues(r) {
+  const esc = s => String(s || '').replace(/'/g, "'\\''");
+  const date = r.generated_at.slice(0, 10);
+
+  const lines = [];
+  lines.push('#!/usr/bin/env bash');
+  lines.push('# GitHub Issues export — generated by kiro-grc-engineering');
+  lines.push(`# Gap assessment run: ${r.runId} (${date})`);
+  lines.push(`# Frameworks: ${r.frameworks.join(', ')}`);
+  lines.push(`# Sources: ${r.sources.join(', ')}`);
+  lines.push('#');
+  lines.push('# Usage:');
+  lines.push('#   bash gap-report.sh                         # uses current repo');
+  lines.push('#   REPO=owner/repo bash gap-report.sh         # specify repo');
+  lines.push('#   DRY_RUN=1 bash gap-report.sh               # preview without creating');
+  lines.push('#');
+  lines.push('# Requires: gh CLI authenticated (gh auth status)');
+  lines.push('# Each issue gets labelled: grc, compliance, and the tier');
+  lines.push('');
+  lines.push('set -euo pipefail');
+  lines.push('REPO="${REPO:-}"');
+  lines.push('DRY_RUN="${DRY_RUN:-0}"');
+  lines.push('REPO_FLAG="${REPO:+--repo $REPO}"');
+  lines.push('');
+  lines.push('create_issue() {');
+  lines.push('  local title="$1" body="$2" labels="$3"');
+  lines.push('  if [[ "$DRY_RUN" == "1" ]]; then');
+  lines.push('    echo "[DRY RUN] Would create: $title"');
+  lines.push('    echo "  Labels: $labels"');
+  lines.push('    return');
+  lines.push('  fi');
+  lines.push('  gh issue create $REPO_FLAG \\');
+  lines.push('    --title "$title" \\');
+  lines.push('    --body "$body" \\');
+  lines.push('    --label "$labels" 2>&1 || echo "  ↳ Issue may already exist or label missing — continuing"');
+  lines.push('}');
+  lines.push('');
+  lines.push('# Ensure labels exist (idempotent)');
+  lines.push('ensure_label() {');
+  lines.push('  gh label create $REPO_FLAG "$1" --color "$2" --description "$3" 2>/dev/null || true');
+  lines.push('}');
+  lines.push('');
+  lines.push('ensure_label "grc"       "0075ca" "GRC Engineering"');
+  lines.push('ensure_label "compliance" "e4e669" "Compliance control"');
+  lines.push('ensure_label "tier1-blocker"      "d73a4a" "Critical/high severity — fix before audit"');
+  lines.push('ensure_label "tier2-finding"      "e98f00" "Medium severity finding"');
+  lines.push('ensure_label "tier3-recommendation" "0e8a16" "Low severity recommendation"');
+  lines.push('');
+
+  const issueCount = r.tiers.tier1.length + r.tiers.tier2.length + r.tiers.tier3.length;
+  lines.push(`echo "Creating ${issueCount} issue(s) from gap assessment ${r.runId}..."`);
+  lines.push('');
+
+  const addIssues = (items, tierLabel, tierEmoji, labelName) => {
+    if (!items.length) return;
+    lines.push(`echo "--- ${tierEmoji} ${tierLabel} (${items.length}) ---"`);
+    for (const t of items) {
+      const fwList = r.frameworks
+        .flatMap(fw => (t.frameworks[fw] || []).map(c => `${fw}: ${c}`))
+        .join(', ') || 'N/A';
+
+      const failList = t.failing_resources.slice(0, 10).map(fr => {
+        const remLine = fr.remediation?.ref
+          ? `\n  - **Fix:** \`${fr.remediation.ref}\` (${fr.remediation.automation || 'manual'}, ~${fr.remediation.effort_hours ?? '?'}h)`
+          : '';
+        return `- \`${fr.source}:${fr.resource_type}:${fr.resource_id}\`\n  ${fr.message || ''}${remLine}`;
+      }).join('\n');
+
+      const more = t.failing_resources.length > 10
+        ? `\n_...and ${t.failing_resources.length - 10} more failing resources (see full report)_` : '';
+
+      const body = `## ${t.scf_id} — ${t.title}
+
+**Tier:** ${tierLabel}
+**Severity:** ${t.severity || 'N/A'}
+**SCF Family:** ${t.family || 'N/A'}
+**Framework controls:** ${fwList}
+
+### Failing Resources (${t.failing_resources.length})
+
+${failList}${more}
+
+### Remediation
+
+Run this command to generate implementation code:
+\`\`\`
+generate-implementation ${t.scf_id.toLowerCase().replace(/[^a-z0-9]/g,'_')} aws
+\`\`\`
+
+---
+*Generated by [kiro-grc-engineering](https://github.com/devedge09/kiro-grc-engineering) · Run \`${r.runId}\` · ${date}*
+*Original toolkit: [GRCEngClub/claude-grc-engineering](https://github.com/GRCEngClub/claude-grc-engineering)*`;
+
+      const title = `[GRC ${t.severity?.toUpperCase() || 'FINDING'}] ${t.scf_id}: ${t.title.slice(0, 60)}${t.title.length > 60 ? '...' : ''}`;
+      lines.push(`create_issue '${esc(title)}' '${esc(body)}' 'grc,compliance,${labelName}'`);
+    }
+    lines.push('');
+  };
+
+  addIssues(r.tiers.tier1, 'Tier 1 Blocker',       '🚨', 'tier1-blocker');
+  addIssues(r.tiers.tier2, 'Tier 2 Finding',        '⚠️', 'tier2-finding');
+  addIssues(r.tiers.tier3, 'Tier 3 Recommendation', '💡', 'tier3-recommendation');
+
+  lines.push(`echo "Done. ${issueCount} issues created."`);
+  lines.push(`echo "Run 'gh issue list $REPO_FLAG --label grc' to see them."`);
+
+  return lines.join('\n');
 }
 
 function makeRunId() {

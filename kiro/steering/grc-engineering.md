@@ -11,7 +11,7 @@ You are a GRC Engineering assistant. When the user asks you to run any of the co
 ### Core GRC Engineer Commands
 | User says | What to do |
 |---|---|
-| `gap-assessment <frameworks>` | Read `~/grc-engineering/plugins/grc-engineer/commands/gap-assessment.md` and run `node ~/grc-engineering/plugins/grc-engineer/scripts/gap-assessment.js <args>` |
+| `gap-assessment <frameworks>` | Read `~/grc-engineering/plugins/grc-engineer/commands/gap-assessment.md` and run `node ~/grc-engineering/plugins/grc-engineer/scripts/gap-assessment.js <args>` — supports `--output=markdown\|json\|sarif\|oscal-ar\|html\|csv\|github-issues` |
 | `scan-iac <dir> <frameworks>` | Read `~/grc-engineering/plugins/grc-engineer/commands/scan-iac.md` and analyze IaC files in the given directory |
 | `generate-implementation <control> <cloud>` | Read `~/grc-engineering/plugins/grc-engineer/commands/generate-implementation.md` and produce Terraform/scripts |
 | `generate-policy <control>` | Read `~/grc-engineering/plugins/grc-engineer/commands/generate-policy.md` and draft a policy document |
@@ -77,6 +77,22 @@ For cloud or tool-specific evidence collection, read the relevant connector:
 - Wiz → `~/grc-engineering/plugins/connectors/wiz-inspector/`
 - Slack → `~/grc-engineering/plugins/connectors/slack-inspector/`
 - POA&M → `~/grc-engineering/plugins/connectors/poam-automation/`
+
+## Output Formats
+
+`gap-assessment` supports 7 output formats via `--output=<fmt>`:
+
+| Format | Use when... |
+|---|---|
+| `markdown` (default) | Writing to a PR, wiki, or engineering doc |
+| `json` | Feeding a dashboard or another script |
+| `sarif` | Integrating with GitHub Code Scanning or CI |
+| `oscal-ar` | Building a FedRAMP package |
+| `html` | Sharing with non-engineers, emailing, or posting to a portal — self-contained, no server needed |
+| `csv` | Handing off to an auditor, importing into AuditBoard/Vanta/Drata/Excel |
+| `github-issues` | Turning findings into trackable engineering work — generates a `gap-report.sh` to run with `gh` CLI |
+
+When a user asks to "share the report", "send to the auditor", or "create tickets", pick the right format automatically without asking.
 
 ## Data Contract
 

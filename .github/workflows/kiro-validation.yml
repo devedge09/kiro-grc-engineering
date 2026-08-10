@@ -81,6 +81,52 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           rm -rf "$tmpdir"
 
+          # Seed fixture findings and test all three new output formats
+          mkdir -p ~/.cache/claude-grc/findings/github-inspector \
+                   ~/.cache/claude-grc/findings/aws-inspector
+          cp tests/fixtures/findings/github-inspector/*.json ~/.cache/claude-grc/findings/github-inspector/
+          cp tests/fixtures/findings/aws-inspector/*.json    ~/.cache/claude-grc/findings/aws-inspector/
+
+          tmpdir=$(mktemp -d)
+
+          # HTML
+          node plugins/grc-engineer/scripts/gap-assessment.js SOC2 \
+            --sources=github-inspector,aws-inspector \
+            --output=html --report-dir="$tmpdir/html" --quiet
+          if grep -q "<!DOCTYPE html>" "$tmpdir/html/gap-report.html" && \
+             grep -q "tier1-blocker\|Tier 1" "$tmpdir/html/gap-report.html"; then
+            echo "✓ gap-assessment --output=html: valid HTML with tier structure"
+          else
+            echo "✗ gap-assessment --output=html: output missing expected content"
+            exit 1
+          fi
+
+          # CSV
+          node plugins/grc-engineer/scripts/gap-assessment.js SOC2 \
+            --sources=github-inspector,aws-inspector \
+            --output=csv --report-dir="$tmpdir/csv" --quiet
+          header=$(head -1 "$tmpdir/csv/gap-report.csv")
+          if echo "$header" | grep -q "run_id" && echo "$header" | grep -q "scf_id"; then
+            echo "✓ gap-assessment --output=csv: valid CSV with expected columns"
+          else
+            echo "✗ gap-assessment --output=csv: missing expected columns in header"
+            exit 1
+          fi
+
+          # GitHub Issues shell script
+          node plugins/grc-engineer/scripts/gap-assessment.js SOC2 \
+            --sources=github-inspector,aws-inspector \
+            --output=github-issues --report-dir="$tmpdir/gh" --quiet
+          if bash -n "$tmpdir/gh/gap-report.sh" && \
+             grep -q "create_issue" "$tmpdir/gh/gap-report.sh"; then
+            echo "✓ gap-assessment --output=github-issues: valid shell with issue creation"
+          else
+            echo "✗ gap-assessment --output=github-issues: invalid shell or missing issue creation"
+            exit 1
+          fi
+
+          rm -rf "$tmpdir"
+
       - name: Validate Kiro agent JSON configs
         run: |
           echo "Validating Kiro agent configs..."

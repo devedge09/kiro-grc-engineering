@@ -22,12 +22,56 @@ Produce a multi-framework gap assessment by joining cached connector findings wi
 **Options**:
 
 - `--sources=<csv>` — restrict to specific connectors (e.g. `aws-inspector,github-inspector`). Default: all connectors with cached findings.
-- `--output=<fmt>` — `markdown` (default), `json`, `sarif`, `oscal-ar`
+- `--output=<fmt>` — `markdown` (default), `json`, `sarif`, `oscal-ar`, `html`, `csv`, `github-issues`
 - `--cache-dir=<path>` — override `~/.cache/claude-grc/findings`
 - `--report-dir=<path>` — where to write the report bundle (default: `./gap-assessment-<run_id>/`)
 - `--refresh` — force a fresh collection from each source (delegates to each `/<tool>:collect --refresh`)
 - `--offline` — use cached SCF data only; skip network
 - `--quiet` — suppress progress output to stderr
+
+## Output formats
+
+| Format | Flag | Best for | File extension |
+|---|---|---|---|
+| Markdown | `--output=markdown` | Engineers, GitHub, wikis | `.md` |
+| JSON | `--output=json` | Programmatic processing, dashboards | `.json` |
+| SARIF | `--output=sarif` | CI/CD pipeline integration, GitHub Code Scanning | `.sarif` |
+| OSCAL Assessment Results | `--output=oscal-ar` | FedRAMP packages, OSCAL toolchains | `.oscal-ar.json` |
+| **HTML** | `--output=html` | Sharing with non-engineers, email, wikis | `.html` |
+| **CSV** | `--output=csv` | Auditors, spreadsheets, AuditBoard, Vanta, Drata | `.csv` |
+| **GitHub Issues** | `--output=github-issues` | Turn findings into trackable work items | `.sh` |
+
+### HTML report
+Self-contained single-file HTML. No server, no dependencies. Includes:
+- Summary cards (tier counts at a glance)
+- Framework coverage bars with pass-rate colour coding
+- Collapsible findings tables with resource-level detail and remediation links
+- Data quality warnings section
+
+```bash
+/grc-engineer:gap-assessment SOC2 --output=html
+# open gap-assessment-<run_id>/gap-report.html in any browser
+```
+
+### CSV (auditor-ready)
+Flat table — one row per control finding — with all fields an auditor or GRC tool needs:
+`run_id, tier, scf_id, control_title, severity, framework_controls, failing_resources, remediation_ref`
+
+```bash
+/grc-engineer:gap-assessment SOC2 --output=csv
+# open in Excel, Google Sheets, or import into AuditBoard/Vanta
+```
+
+### GitHub Issues
+Generates a shell script (`gap-report.sh`) that creates one GitHub Issue per finding using the `gh` CLI.
+Each issue has: title with severity, full resource list, remediation command, framework control IDs, labels.
+
+```bash
+/grc-engineer:gap-assessment SOC2,NIST --output=github-issues
+DRY_RUN=1 bash gap-report.sh           # preview what would be created
+bash gap-report.sh                      # create issues in current repo
+REPO=org/repo bash gap-report.sh        # create in a specific repo
+```
 
 ## What it does
 
