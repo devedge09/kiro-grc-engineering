@@ -1,0 +1,12 @@
+{
+  "hooks": [
+    {
+      "name": "validate-finding-on-write",
+      "description": "Automatically validates any JSON file written to ~/.cache/claude-grc/findings/ against the finding schema. Prevents invalid evidence from entering the gap assessment pipeline.",
+      "event": "post_tool_use",
+      "tools": ["write"],
+      "command": "node ~/grc-engineering/kiro/hooks/validate-finding-on-write.js",
+      "enabled": true
+    }
+  ]
+}

@@ -1,0 +1,130 @@
+name: Kiro fork validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate findings, schemas, and scripts
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check no blocked npm dependencies remain
+        run: |
+          echo "Checking for blocked npm imports..."
+          if grep -rn "from 'js-yaml'\|from \"js-yaml\"\|require('js-yaml')\|from '@octokit\|from \"@octokit\|import dotenv from" \
+            plugins/grc-engineer/scripts/ \
+            plugins/grc-engineer/src/ 2>/dev/null; then
+            echo "ERROR: Blocked npm imports found above. Replace with built-in alternatives."
+            exit 1
+          fi
+          echo "✓ No blocked imports found"
+
+      - name: Syntax-check all scripts (no npm install needed)
+        run: |
+          echo "Checking ESM script syntax..."
+          failed=0
+          for f in plugins/grc-engineer/scripts/*.js plugins/grc-engineer/src/*.js kiro/tools/*.js kiro/hooks/*.js; do
+            [ -f "$f" ] || continue
+            if node --input-type=module --check < "$f" 2>/dev/null; then
+              echo "  ✓ $f"
+            else
+              echo "  ✗ $f"
+              node --input-type=module --check < "$f" || true
+              failed=$((failed + 1))
+            fi
+          done
+          [ $failed -eq 0 ] || exit 1
+
+      - name: Validate all fixture findings against schema
+        run: |
+          echo "Validating fixture findings..."
+          node kiro/tools/findings-validator.js \
+            --dir=tests/fixtures/findings \
+            --recursive
+
+      - name: Smoke-test core scripts
+        run: |
+          echo "Smoke-testing scripts..."
+
+          # gap-assessment with no findings should exit with a clear message, not crash
+          output=$(node plugins/grc-engineer/scripts/gap-assessment.js SOC2 --quiet 2>&1 || true)
+          if echo "$output" | grep -q "No cached findings"; then
+            echo "✓ gap-assessment: correct no-findings response"
+          else
+            echo "✗ gap-assessment: unexpected output: $output"
+            exit 1
+          fi
+
+          # generate-policy should produce real output
+          tmpdir=$(mktemp -d)
+          cd "$tmpdir"
+          output=$(node $GITHUB_WORKSPACE/plugins/grc-engineer/scripts/generate-policy.js \
+            "Ensure S3 buckets have encryption and Department tag" rego 2>&1)
+          if echo "$output" | grep -q "deny\[msg\]"; then
+            echo "✓ generate-policy: produced real Rego deny rule"
+          else
+            echo "✗ generate-policy: output missing deny rule"
+            echo "$output"
+            exit 1
+          fi
+          cd "$GITHUB_WORKSPACE"
+          rm -rf "$tmpdir"
+
+      - name: Validate Kiro agent JSON configs
+        run: |
+          echo "Validating Kiro agent configs..."
+          for f in kiro/agents/*.json; do
+            if node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))" 2>/dev/null; then
+              echo "  ✓ $f"
+            else
+              echo "  ✗ $f (invalid JSON)"
+              exit 1
+            fi
+          done
+
+      - name: Validate yaml-shim parses key config YAMLs
+        run: |
+          node --input-type=module << 'EOF'
+          import { load } from './plugins/grc-engineer/scripts/yaml-shim.mjs';
+          import fs from 'node:fs';
+
+          // Test the files actually loaded at runtime (not the huge NIST family files)
+          const files = [
+            'plugins/grc-engineer/config/frameworks/soc2.yaml',
+            'plugins/grc-engineer/config/frameworks/iso27001.yaml',
+            'plugins/grc-engineer/config/frameworks/nist800-53.yaml',
+            'plugins/grc-engineer/config/control-crosswalk.yaml',
+            'plugins/grc-engineer/config/providers/aws.yaml',
+            'plugins/grc-engineer/config/providers/gcp.yaml',
+            'plugins/grc-engineer/config/providers/azure.yaml',
+            'plugins/grc-engineer/config/providers/kubernetes.yaml',
+          ];
+
+          let failed = 0;
+          for (const f of files) {
+            try {
+              const p = load(fs.readFileSync(f, 'utf8'));
+              if (!p || typeof p !== 'object') throw new Error('parsed to null/non-object');
+              console.log(`  ✓ ${f}`);
+            } catch (e) {
+              console.error(`  ✗ ${f}: ${e.message}`);
+              failed++;
+            }
+          }
+          if (failed > 0) { process.exit(1); }
+          console.log(`\n✓ ${files.length} key YAML configs parsed successfully`);
+          EOF
+
+      - name: Check install script syntax
+        run: bash -n kiro/install.sh && echo "✓ install.sh syntax OK"
