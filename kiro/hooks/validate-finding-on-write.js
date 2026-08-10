@@ -90,7 +90,7 @@ async function validateFile(filePath) {
     errors.forEach(e => console.error(`  [${e.path}] ${e.message}`));
     console.error('');
     console.error('Fix the finding file before running gap-assessment.');
-    console.error(`See: https://github.com/devedge09/kiro-grc-engineering/blob/main/schemas/finding.schema.json`);
+    console.error(`See: https://github.com/devedge09/grckit/blob/main/schemas/finding.schema.json`);
     process.exit(1);
   }
 }

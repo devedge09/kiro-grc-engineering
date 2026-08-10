@@ -1,4 +1,4 @@
-# kiro-grc-engineering
+# grckit
 
 > **Kiro-optimized fork of [GRCEngClub/claude-grc-engineering](https://github.com/GRCEngClub/claude-grc-engineering)**  
 > Original work by the [GRC Engineering Club](https://grcengclub.com) — all credit to them.
@@ -34,7 +34,7 @@ Everything runs on **Node 22 built-ins alone** — no `npm install` needed.
 
 ```bash
 # 1. Clone to ~/grc-engineering
-git clone https://github.com/devedge09/kiro-grc-engineering.git ~/grc-engineering
+git clone https://github.com/devedge09/grckit.git ~/grc-engineering
 
 # 2. Create Kiro config directories and findings cache
 mkdir -p ~/.kiro/steering ~/.kiro/agents ~/.cache/claude-grc/findings

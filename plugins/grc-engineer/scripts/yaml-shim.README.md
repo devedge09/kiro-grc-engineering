@@ -3,7 +3,7 @@
 A zero-dependency YAML parser for Node.js ESM. Drop-in replacement for
 [`js-yaml`](https://github.com/nodeca/js-yaml)'s `load()` and `loadAll()`.
 
-Written as part of the [kiro-grc-engineering](https://github.com/devedge09/kiro-grc-engineering) project
+Written as part of the [grckit](https://github.com/devedge09/grckit) project
 to run the GRC Engineering toolkit in environments where npm packages are unavailable.
 
 ## Usage

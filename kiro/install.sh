@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# kiro/install.sh — one-command setup for kiro-grc-engineering
+# kiro/install.sh — one-command setup for grckit
 # Usage: bash kiro/install.sh [--repo-dir=<path>]
 #
 # What it does:
@@ -33,7 +33,7 @@ for arg in "$@"; do
   fi
 done
 
-hdr "kiro-grc-engineering installer"
+hdr "grckit installer"
 info "Repo: $REPO_DIR"
 
 # ─── 1. Prerequisites ─────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ REQUIRED_PATHS=(
 for p in "${REQUIRED_PATHS[@]}"; do
   if [[ ! -f "$REPO_DIR/$p" ]]; then
     err "Expected file missing: $REPO_DIR/$p"
-    err "Re-clone from https://github.com/devedge09/kiro-grc-engineering"
+    err "Re-clone from https://github.com/devedge09/grckit"
     exit 1
   fi
 done
