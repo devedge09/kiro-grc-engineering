@@ -15,7 +15,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import yaml from 'js-yaml';
+import yaml from './yaml-shim.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { generateFedRAMPBaselineEvidence } from '../src/evidence-collector.js';
 import { loadFedRAMP20xKSI } from '../src/config-loader.js';

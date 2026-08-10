@@ -11,9 +11,12 @@
  * Checks against: SOC2, PCI-DSS, NIST 800-53, ISO 27001, etc.
  */
 
-const fs = require('fs');
-const path = require('path');
-const yaml = require('js-yaml');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import yaml from './yaml-shim.mjs';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class IaCScanner {
   constructor(directory, frameworks, options = {}) {
@@ -627,4 +630,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = IaCScanner;
+export default IaCScanner;

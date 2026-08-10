@@ -11,9 +11,20 @@
 import { reviewPR } from '../src/pr-reviewer.js';
 import fs from 'fs/promises';
 import path from 'path';
-import dotenv from 'dotenv';
 
-dotenv.config();
+// Load .env file using only built-ins (no dotenv package needed)
+try {
+  const envFile = await fs.readFile(path.resolve(process.cwd(), '.env'), 'utf8');
+  for (const line of envFile.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx < 0) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, '');
+    if (key && !(key in process.env)) process.env[key] = val;
+  }
+} catch { /* .env file is optional */ }
 
 async function main() {
   const repo = process.argv[2];

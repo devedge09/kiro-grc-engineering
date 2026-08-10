@@ -3,7 +3,23 @@
  * Reviews pull requests for compliance regressions
  */
 
-import { Octokit } from '@octokit/rest';
+import { execSync } from 'child_process';
+
+// Thin GitHub API wrapper using the `gh` CLI instead of @octokit/rest
+const ghApi = {
+  getPR(repo, prNumber) {
+    const out = execSync(`gh pr view ${prNumber} --repo ${repo} --json number,title,url,headRefOid`, { encoding: 'utf8' });
+    const d = JSON.parse(out);
+    return { number: d.number, title: d.title, html_url: d.url, head: { sha: d.headRefOid } };
+  },
+  getPRFiles(repo, prNumber) {
+    const out = execSync(`gh pr diff ${prNumber} --repo ${repo} --name-only`, { encoding: 'utf8' });
+    return out.trim().split('\n').filter(Boolean).map(f => ({ filename: f, status: 'modified', patch: null }));
+  },
+  getPRDiff(repo, prNumber) {
+    return execSync(`gh pr diff ${prNumber} --repo ${repo}`, { encoding: 'utf8' });
+  }
+};
 
 const COMPLIANCE_CHECKS = {
   privilege_escalation: {
@@ -65,68 +81,38 @@ const COMPLIANCE_CHECKS = {
 };
 
 export async function reviewPR(repo, prNumber, framework = 'SOC2', githubToken) {
-  if (!githubToken) {
-    throw new Error('GITHUB_TOKEN environment variable is required');
+  const pr = ghApi.getPR(repo, prNumber);
+
+  // Get full diff and parse per-file patches
+  let diff = '';
+  try { diff = ghApi.getPRDiff(repo, prNumber); } catch { /* gh not authed or no diff */ }
+
+  const filePatches = {};
+  let currentFile = null;
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('diff --git')) {
+      const m = line.match(/b\/(.+)$/);
+      if (m) { currentFile = m[1]; filePatches[currentFile] = []; }
+    } else if (currentFile) {
+      filePatches[currentFile].push(line);
+    }
   }
 
-  const octokit = new Octokit({ auth: githubToken });
-  const [owner, repoName] = repo.split('/');
-
-  // Get PR details
-  const { data: pr } = await octokit.rest.pulls.get({
-    owner,
-    repo: repoName,
-    pull_number: prNumber
-  });
-
-  // Get PR files
-  const { data: files } = await octokit.rest.pulls.listFiles({
-    owner,
-    repo: repoName,
-    pull_number: prNumber
-  });
-
+  const files = ghApi.getPRFiles(repo, prNumber);
   const issues = [];
 
-  // Review each file
   for (const file of files) {
     if (file.status === 'removed') continue;
-
-    // Get file content
-    let content = '';
-    if (file.patch) {
-      content = file.patch;
-    } else {
-      try {
-        const { data: fileData } = await octokit.rest.repos.getContent({
-          owner,
-          repo: repoName,
-          path: file.filename,
-          ref: pr.head.sha
-        });
-        if (fileData.type === 'file' && 'content' in fileData) {
-          content = Buffer.from(fileData.content, 'base64').toString('utf-8');
-        }
-      } catch (err) {
-        // File might be binary or inaccessible
-        continue;
-      }
-    }
-
-    // Check for compliance issues
+    const patchLines = filePatches[file.filename] || [];
+    const content = patchLines.join('\n');
     const fileIssues = analyzeFile(file.filename, content, framework);
     issues.push(...fileIssues);
   }
 
-  // Generate review comments
   const comments = generateComments(issues, framework);
 
   return {
-    pr: {
-      number: prNumber,
-      title: pr.title,
-      url: pr.html_url
-    },
+    pr: { number: prNumber, title: pr.title, url: pr.html_url },
     issues,
     comments,
     summary: {

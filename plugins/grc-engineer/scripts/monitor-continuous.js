@@ -32,7 +32,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import yaml from 'js-yaml';
+import yaml from './yaml-shim.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

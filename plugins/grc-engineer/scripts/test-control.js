@@ -10,12 +10,15 @@
  * - Integration tests (works with other controls)
  */
 
-const { exec } = require('child_process');
-const util = require('util');
+import { exec } from 'child_process';
+import util from 'util';
 const execPromise = util.promisify(exec);
-const fs = require('fs');
-const path = require('path');
-const yaml = require('js-yaml');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import yaml from './yaml-shim.mjs';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class ControlTester {
   constructor(controlId, cloudProvider = 'aws', options = {}) {
@@ -868,4 +871,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = ControlTester;
+export default ControlTester;

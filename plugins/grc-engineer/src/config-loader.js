@@ -12,7 +12,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import yaml from 'js-yaml';
+import yaml from '../scripts/yaml-shim.mjs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
